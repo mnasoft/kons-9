@@ -1,4 +1,4 @@
-(defpackage #:font
+(defpackage :font
   (:use :cl)
   (:shadowing-import-from glyph reify? bounding-box x-min x-max y-min y-max em)
   (:shadow cl:open cl:close)
@@ -52,7 +52,7 @@
            #:extents
            #:character-sets))
 
-(in-package #:font)
+(in-package :font)
 
 (defmacro with (font &body body)
   `(let ((font (open ,font)))

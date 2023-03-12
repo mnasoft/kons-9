@@ -1,4 +1,4 @@
-(in-package #:kons-9/testsuite)
+(in-package :kons-9/testsuite)
 
 (defun list-available-tests ()
   (format t "~&~%Available testcases:")

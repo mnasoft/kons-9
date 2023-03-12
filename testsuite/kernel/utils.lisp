@@ -1,4 +1,4 @@
-(in-package #:kons-9/testsuite)
+(in-package :kons-9/testsuite)
 
 (define-testcase exercise-strcat ()
   (assert-string= "" (kons-9::strcat))

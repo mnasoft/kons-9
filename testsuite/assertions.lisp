@@ -1,4 +1,4 @@
-(in-package #:kons-9/testsuite)
+(in-package :kons-9/testsuite)
 
 (defun float-is-essentially-equal (float1 float2 &key (inaccuracy 0))
   (<= (abs (- float1 float2))

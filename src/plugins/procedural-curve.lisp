@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 (defmacro def-procedural-curve (name slot-names-and-initforms class-options
                                   inputs &rest compute-expr)

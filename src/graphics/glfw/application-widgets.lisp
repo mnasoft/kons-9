@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 ;;;; ui-motion-outliner-item ==========================================================
 

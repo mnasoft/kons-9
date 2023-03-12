@@ -1,4 +1,4 @@
-(in-package #:kons-9/testsuite)
+(in-package :kons-9/testsuite)
 
 (define-testcase exercise-point-cloud/get-bounds/validate (point-cloud &key expected-bounds-lo expected-bounds-hi)
   "Validate that GET-BOUNDS on POINT-CLOUD returns the expected values."

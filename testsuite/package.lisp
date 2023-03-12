@@ -1,4 +1,4 @@
-(defpackage #:kons-9/testsuite
+(defpackage :kons-9/testsuite
    (:local-nicknames (#:confidence #:org.melusina.confidence)
 		     (#:p #:origin.vec3))
    (:use #:common-lisp)

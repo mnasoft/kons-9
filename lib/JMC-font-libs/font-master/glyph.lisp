@@ -1,4 +1,4 @@
-(defpackage #:glyph
+(defpackage :glyph
   (:use :cl)
   (:shadow cl:character)
   (:export #:index

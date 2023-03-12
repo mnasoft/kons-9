@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 #|
 A SWEEP-MESH is a subclass of UV-MESH and DEPENDENCY-NODE-MIXIN. It uses the

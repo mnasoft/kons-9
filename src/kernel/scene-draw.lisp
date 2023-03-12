@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 ;;;; scene draw functions ======================================================
 

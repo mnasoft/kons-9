@@ -1,2 +1,2 @@
-(defpackage #:font-zpb-ttf
+(defpackage :font-zpb-ttf
   (:use :cl))

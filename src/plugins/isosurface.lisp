@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 ;;;; marching cubes algorithm ==================================================
 ;;;; downloaded from web, original copyright included below

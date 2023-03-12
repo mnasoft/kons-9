@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 ;;; TODO:
 ;;; does instancing of motions make sense? they do same anim on same shapes...

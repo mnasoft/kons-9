@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 #|
 These demos assume that you have succeeded in loading the system and opening

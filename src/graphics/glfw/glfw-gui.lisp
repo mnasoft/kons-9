@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 (defparameter *window-size* '(960 540))
 (defparameter *current-mouse-pos-x* 0)

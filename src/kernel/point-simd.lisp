@@ -1,4 +1,4 @@
-(in-package #:kons-9)
+(in-package :kons-9)
 
 ;;; https://github.com/nikodemus/sb-cga/blob/master/types.lisp
 ;;; MATRIX TYPE
