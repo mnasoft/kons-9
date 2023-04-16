@@ -37,6 +37,10 @@
    (ui-w 0.0)
    (ui-h 0.0)))
 
+(defmethod print-object ((self ui-rect) stream)
+  (print-unreadable-object (self stream :type t)
+    (format stream "X: ~a, Y: ~a, W: ~a, H: ~a" (ui-x self) (ui-y self) (ui-w self) (ui-h self))))
+
 (defmethod ui-right ((rect ui-rect))
   (+ (ui-x rect) (ui-w rect)))
 
@@ -63,7 +67,8 @@
 ;;;; ui-view ===================================================================
 
 (defclass-kons-9 ui-view (ui-rect)
-  ((ui-parent nil)
+  ((ui-name nil)
+   (ui-parent nil)
    (bg-color (c! 0 0 0 0))
    (fg-color (c! 0 0 0 1))
    (is-visible? t)
@@ -90,6 +95,11 @@
   (declare (ignore x y button))
   (when (on-click-fn view)
     (funcall (on-click-fn view) modifiers)))
+
+(defmethod do-drag-action ((view ui-view) x y dx dy)
+  (declare (ignore x y dx dy))
+  ;; do nothing
+  )
 
 ;;;; ui-label-item =============================================================
 
@@ -145,60 +155,169 @@
   (declare (ignore x y button modifiers))
   (setf (is-pushed? view) (not (is-pushed? view))))
 
+;;;; ui-choice-button ==========================================================
+
+(defclass-kons-9 ui-choice-button (ui-label-item)
+  (;(choice-index 0)
+   (choices (make-array 0 :adjustable t :fill-pointer 0))
+   (is-popped-up? nil)
+   (choice-menu nil))
+  (:default-initargs
+   :draw-border? t ;nil
+   :is-active? t))
+
+(defmethod initialize-instance :after ((view ui-choice-button)  &rest initargs)
+  (declare (ignore initargs))
+  ;; assumes choices have been set
+  (set-width-for-text view)
+  (setf (choice-menu view) (make-instance 'ui-choice-menu :choice-button view))
+  (create-contents (choice-menu view)))
+
+(defmethod set-width-for-text ((view ui-choice-button))
+  (setf (ui-w view) (max 80
+                         (if (> (length (choices view)) 0)
+                             (+ (reduce #'max (map 'vector #'ui-text-width (choices view)))
+                                (* 2 (text-padding view)))
+                             0))))
+
+(defmethod do-action ((view ui-choice-button) x y button modifiers)
+  (declare (ignore x y button modifiers))
+  (setf (is-visible? (choice-menu view)) t))
+
 ;;;; ui-text-box-item ==========================================================
 
 (defclass-kons-9 ui-text-box-item (ui-label-item)
-  ((cursor-position 0))
+  ((cursor-position 0)
+   (mark-position 0))
   (:default-initargs
    :draw-border? t
    :bg-color (c! 1 1 1 1)
    :is-active? t
    :can-have-keyboard-focus? t))
 
+(defmethod coord-to-text-pos ((view ui-text-box-item) x y)
+  (max 0
+       (min (length (text view))
+            (floor (/ (first (local-coords view x y)) *ui-font-width*)))))
+
 (defmethod do-action ((view ui-text-box-item) x y button modifiers)
-  (declare (ignore button modifiers))
+  (declare (ignore button))
   (setf *ui-keyboard-focus* view)
-  (setf (cursor-position view) (max 0
-                                    (min (length (text view))
-                                         (floor (/ (first (local-coords view x y)) *ui-font-width*))))))
+  (let ((pos (coord-to-text-pos view x y)))
+    (if (member :shift modifiers)       ;shift-click to set cursor only
+        (setf (mark-position view) pos)
+        (progn                          ;click sets both mark and cursor
+          (setf (mark-position view) pos)
+          (setf (cursor-position view) pos)))))
+
+(defmethod do-drag-action ((view ui-text-box-item) x y dx dy)
+  (declare (ignore dx dy))
+  (let ((pos (coord-to-text-pos view x y)))
+    (setf (cursor-position view) pos)))
 
 ;;; TODO ++ edit text
 ;;; TODO ++ handle char input properly
 ;;; TODO ++ do not insert modifier key text
 ;;; TODO ++ draw cursor when is *ui-keyboard-focus*
-;;; TODO -- mark region (shift-click, drag, double click, etc)
-;;; TODO -- arrow keys
+;;; TODO ++ arrow keys
+;;; TODO ++ mark region
+;;; + shift-click
+;;; + drag
+;;; - double click -- not handled by glfw?
+;;; + alt A (select all)
+;;; TODO ++ emacs bindings -- C-a, C-e, C-d, C-k, C-y
+;;; TODO -- handle text that is wider than text-box -- clip text to widget?
 
-(defun insert-string (string insert position)
+(defun insert-string (string insertion position)
   (concatenate 'string
                (subseq string 0 position)
-               insert
+               insertion
                (if (< position (length string))
                    (subseq string position (length string))
                    "")))
   
+(defun remove-string (string position-0 position-1)
+  (let ((p0 (min position-0 position-1))
+        (p1 (max position-0 position-1)))
+    (concatenate 'string
+                 (subseq string 0 p0)
+                 (subseq string p1 (length string)))))
+
+(defmethod remove-selected-text ((view ui-text-box-item))
+  (let ((pos (cursor-position view))
+        (mark (mark-position view)))
+    (when (not (= pos mark))            ;text selected
+      (let ((p0 (min pos mark)))
+        (setf (text view) (remove-string (text view) pos mark))
+        (setf (cursor-position view) p0)
+        (setf (mark-position view) p0)))))
+  
 (defmethod do-char-input ((view ui-text-box-item) char)
+  ;; delete selected text before insertion
+  (remove-selected-text view)
+  ;; insert text
   (setf (text view) (insert-string (text view) (string char) (cursor-position view)))
-  (incf (cursor-position view)))
+  (incf (cursor-position view))
+  (setf (mark-position view) (cursor-position view)))
 
 (defmethod do-paste-input ((view ui-text-box-item) string)
   (setf (text view) (insert-string (text view) string (cursor-position view)))
-  (incf (cursor-position view) (length string)))
+  (incf (cursor-position view) (length string))
+  ;; update mark
+  (setf (mark-position view) (cursor-position view)))
 
 (defmethod do-copy-input ((view ui-text-box-item))
-  (text view))
+  (let ((pos (cursor-position view))
+        (mark (mark-position view)))
+    (if (not (= pos mark))            ;text selected
+      (let ((p0 (min pos mark))
+            (p1 (max pos mark)))
+        (subseq (text view) p0 p1))
+      "")))                             ;no text selection
 
 (defmethod do-cut-input ((view ui-text-box-item))
-  (let ((result (text view)))
-    (setf (text view) "")
+  (let ((result (do-copy-input view)))
+    (remove-selected-text view)
     result))
 
-(defmethod do-backspace-input ((view ui-text-box-item))
-  (when (> (cursor-position view) 0)
-    (setf (text view) (concatenate 'string
-                                   (subseq (text view) 0 (1- (cursor-position view)))
-                                   (subseq (text view) (cursor-position view) (length (text view)))))
-    (decf (cursor-position view))))
+(defmethod do-select-all ((view ui-text-box-item))
+  (setf (mark-position view) 0)
+  (setf (cursor-position view) (length (text view))))
+
+(defmethod do-backspace-input ((view ui-text-box-item) mod-keys)
+  (let ((pos (cursor-position view))
+        (mark (mark-position view)))
+    (cond ((= pos mark)                 ;no text selection
+           (when (> pos 0)
+             (cond ((member :shift mod-keys)   ;delete to start of text when shift modifier
+                    (setf (text view) (subseq (text view) pos (length (text view))))
+                    (setf (cursor-position view) 0)
+                    (setf (mark-position view) 0))
+                   (t                          ;delete single character
+                    (setf (text view) (concatenate 'string
+                                                   (subseq (text view) 0 (1- pos))
+                                                   (subseq (text view) pos (length (text view)))))
+                    (decf (cursor-position view))
+                    (decf (mark-position view))))))
+          (t                            ;text selected
+           (remove-selected-text view)))))
+
+(defmethod do-delete-forward-input ((view ui-text-box-item))
+  (let ((pos (cursor-position view))
+        (mark (mark-position view)))
+    (cond ((= pos mark)                 ;no text selection
+           (when (< pos (length (text view)))
+             (setf (text view) (concatenate 'string
+                                            (subseq (text view) 0 pos)
+                                            (subseq (text view) (1+ pos) (length (text view)))))))
+          (t                            ;text selected
+           (remove-selected-text view)))))
+
+(defmethod do-kill-line-input ((view ui-text-box-item))
+  (let ((pos (cursor-position view)))
+    (when (< pos (length (text view)))
+      (setf (text view) (subseq (text view) 0 pos)))
+    (setf (mark-position view) pos)))
 
 (defmethod do-arrow-input ((view ui-text-box-item) key)
   (let ((max-position (length (text view))))
@@ -209,7 +328,9 @@
           ((eq :up key)
            (setf (cursor-position view) 0))
           ((eq :down key)
-           (setf (cursor-position view) max-position)))))
+           (setf (cursor-position view) max-position))))
+  ;; update mark
+  (setf (mark-position view) (cursor-position view)))
 
 ;;;; ui-menu-item ==============================================================
 
@@ -262,6 +383,10 @@
         do (setf (ui-parent child) nil))
   (setf (fill-pointer (children view)) 0)
   view)
+
+(defmethod find-child ((view ui-group) name)
+  (find-if (lambda (child) (eql name (ui-name child)))
+           (children view)))
 
 (defmethod update-layout ((view ui-group))
   (ecase (layout view)
@@ -349,6 +474,113 @@
                    (incf y (+ (ui-h child) spacing))))))
   view)
 
+;;;; ui-data-entry =============================================================
+
+(defclass-kons-9 ui-data-entry (ui-group)
+  ()
+  (:default-initargs
+   :is-visible? t
+   :layout :horizontal
+   :spacing 0
+   :padding 0))
+
+(defmethod get-entry-value ((view ui-data-entry) type)
+  (case type
+    ((:boolean)
+     (let ((check-box (aref (children view) 1)))
+       (is-pushed? check-box)))
+    ((:choice)
+     (let* ((choice-button (aref (children view) 1))
+            (str (text choice-button)))
+       (read-from-string str)))
+    (otherwise
+     (let* ((text-box (aref (children view) 1))
+            (str (text text-box)))
+       (ecase type
+         ((:number :symbol) (read-from-string str))
+         ((:string) str)
+         ((:point) (with-input-from-string (s str) (p! (read s) (read s) (read s)))))))))
+
+(defmethod set-entry-value ((view ui-data-entry) value type)
+  (case type
+    ((:boolean)
+     (let ((check-box (aref (children view) 1)))
+       (setf (is-pushed? check-box) value)))
+    ((:choice)
+     (let ((choice-button (aref (children view) 1)))
+       (setf (text choice-button) (format nil "~A" value))))
+    (otherwise
+     (let ((text-box (aref (children view) 1)))
+       (setf (text text-box)
+             (ecase type
+               ((:number :symbol :string) (format nil "~A" value))
+               ((:point) (format nil "~A ~A ~A" (p:x value) (p:y value) (p:z value)))))))))
+
+(defun make-data-entry (name label value type &optional (choices nil))
+  (let* ((view (make-instance 'ui-data-entry :ui-name name :draw-border? nil))
+         (label (make-instance 'ui-label-item :ui-x 0 :ui-y 0
+                                              :ui-w (+ 10 (ui-text-width label))
+                                              :ui-h *ui-button-item-height*
+                                              :text label :text-padding 5))
+         (value-widget (case type
+                         ((:boolean)
+                          (make-instance 'ui-check-box-item :ui-x 80 :ui-y 0
+                                                            :ui-w 120 :ui-h *ui-button-item-height*
+                                                            :text ""))
+                         ((:choice)
+                          (make-instance 'ui-choice-button :ui-x 80 :ui-y 0
+                                                           :ui-w 120 :ui-h *ui-button-item-height*
+                                                           :text "" :choices choices))
+                         (otherwise
+                          (make-instance 'ui-text-box-item :ui-x 80 :ui-y 0
+                                                           :ui-w 120 :ui-h *ui-button-item-height*)))))
+    (ui-add-children view (list label value-widget))
+    (update-layout view)
+    (set-entry-value view value type)
+    view))
+
+;;;; scene-item-editor =========================================================
+
+;; editable-slot-info -- name type validate-fn text-box-hints
+;; highlight illegal text field if fails validation
+
+(defun ui-get-child-values (view names types)
+  (mapcar (lambda (name type) (get-entry-value (find-child view name) type))
+          names
+          types))
+
+(defun ui-make-entries (names values types choices-list)
+  (mapcar (lambda (name value type choices)
+            (make-data-entry name (format nil "~A:" name) value type choices))
+          names
+          values
+          types
+          choices-list))
+
+(defun make-scene-item-editor (obj update-obj-fn &key (title (format nil "Edit ~A" (name obj)))
+                                                   (close-button? t)
+                                                   (update-button-text "Update")
+                                                   (close-after-update? nil))
+  (let* ((param-info (editable-slots obj))                          ;get param names from class slot
+         (param-names (mapcar #'first param-info))
+         (param-types (mapcar #'second param-info))
+         (param-choices (mapcar (lambda (param) (if (= 3 (length param))
+                                                    (elt param 2)
+                                                    nil))
+                                param-info))
+         (param-values (get-slot-values obj param-names))           ;get param values from instance
+         (contents (ui-make-entries param-names param-values param-types param-choices));create ui widgets for params
+         (update-fn (lambda (editor)                                ;define update func for editor
+                      (let* ((ui-values (ui-get-child-values (find-child editor 'contents)
+                                                             param-names param-types)))
+                        (set-slot-values obj param-names ui-values) ;set instance slot values
+                        (when close-after-update? (hide-ui-content editor))
+                        (when update-obj-fn
+                          (funcall update-obj-fn obj))))))          ;update instance
+    (make-editor-panel title update-fn contents
+                       :close-button? close-button?
+                       :update-button-text update-button-text)))
+
 ;;;; ui-message-box ===========================================================
 
 (defclass-kons-9 ui-message-box (ui-group)
@@ -424,19 +656,24 @@
     (ui-add-child box (update-layout buttons-group))
     (update-layout box)))
 
-#|
-(setf (ui-contents *default-scene-view*)
-      (list (make-dialog-box (list (make-instance 'ui-label-item :ui-w *ui-popup-menu-width*
-                                                                 :text "Label 1")
-                                   (make-instance 'ui-label-item :ui-w *ui-popup-menu-width*
-                                                                 :text "Label 2")
-                                   (make-instance 'ui-button-item :ui-w *ui-popup-menu-width*
-                                                                  :text "My Button")
-                                   (make-instance 'ui-check-box-item :ui-w *ui-popup-menu-width*
-                                                                     :text "Check Box")
-                                   (make-instance 'ui-text-box-item :ui-w *ui-popup-menu-width*
-                                                                    :text "Text Box")
-                                   ))))
+#| xxxx
+(show-ui-content
+ (make-dialog-box
+  (list (make-instance 'ui-label-item :ui-w *ui-popup-menu-width*
+                                      :text "Label 1")
+        (make-instance 'ui-choice-button :ui-w *ui-popup-menu-width*
+;;                                         :choice-index 0
+                                         :text "Pulldown"
+                                         :choices #("Choice 0" "Best Choice 1" "Choice 2"))
+        (make-instance 'ui-label-item :ui-w *ui-popup-menu-width*
+                                      :text "Label 2")
+        (make-instance 'ui-button-item :ui-w *ui-popup-menu-width*
+                                       :text "My Button")
+        (make-instance 'ui-check-box-item :ui-w *ui-popup-menu-width*
+                                          :text "Check Box")
+        (make-instance 'ui-text-box-item :ui-w *ui-popup-menu-width*
+                                         :text "Text Box")
+        )))
 |#
 
 (defun make-text-input-dialog-box (title ok-action-fn &optional (ok-button-text "OK") (cancel-button-text "Cancel"))
@@ -481,19 +718,54 @@
     (ui-add-child box (update-layout buttons-group))
     (update-layout box)))
 
-#|
-(setf (ui-contents *default-scene-view*)
-      (list (make-text-input-dialog-box "Save Scene File" (lambda (str) (save-scene *scene* str)))))
-
-(setf (ui-contents *default-scene-view*)
-      (list (make-text-input-dialog-box "Open Scene File" (lambda (str) (load-scene str)))))
-|#
-
 ;;; TODO -- how to add contextual items from plugins?
 ;;;         -- plugin class -- register method adds UI elements -- eg. Create, Context, Edit, ...
 ;;; TODO -- delete shapes in hierarchy
 ;;; TODO -- update ui-contents due to scene updates -- eg hierarchy viewer when shape deleted
 ;;; TODO -- global key bindings (eg. space, backspace) -- register properly and avoid shadowing with c-t
+
+;;;; editor panel --------------------------------------------------------------
+
+(defun make-editor-panel (title update-func contents &key (close-button? t) (update-button-text "Update"))
+  (let* ((box (make-instance 'ui-dialog-box
+                             :ui-x 20
+                             :ui-y 20
+                             :title title
+                             :spacing 10))
+         (contents-group (make-instance 'ui-group
+                                        :ui-name 'contents
+                                        :layout :vertical
+                                        :spacing 5
+                                        :padding 0
+                                        :justification :right/bottom
+                                        :draw-border? nil ;t ;for debugging
+                                        ))
+         (buttons-group (make-instance 'ui-group
+                                        :layout :horizontal
+                                        :spacing 5
+                                        :padding 5
+                                        :draw-border? nil ;t ;for debugging
+                                        ))
+         (close-button (when close-button?
+                         (make-instance 'ui-button-item
+                                        :ui-w 80
+                                        :text "Close"
+                                        :on-click-fn (lambda (modifiers)
+                                                       (declare (ignore modifiers))
+                                                       (setf (is-visible? box) nil)))))
+         (update-button (make-instance 'ui-button-item
+                                   :ui-w 80
+                                   :text update-button-text
+                                   :on-click-fn (lambda (modifiers)
+                                                  (declare (ignore modifiers))
+                                                  (when update-func (funcall update-func box))))))
+    (ui-add-children contents-group contents)
+    (ui-add-children buttons-group (if close-button?
+                                       (list close-button update-button)
+                                       (list update-button)))
+    (ui-add-child box (update-layout contents-group))
+    (ui-add-child box (update-layout buttons-group))
+    (update-layout box)))
 
 ;;;; ui-status-bar =============================================================
 
@@ -542,6 +814,42 @@
     (ui-set-rect (aref (children view) 4)    0    h (ui-w view) h)
     view))
                         
+;;;; ui-choice-menu ============================================================
+
+(defclass-kons-9 ui-choice-menu (ui-group)
+  ((choice-button nil))
+  (:default-initargs
+   :is-visible? nil
+   :bg-color (c! .8 .8 .8 1.0)          ;opaque as we may draw over other widgets
+   :layout :vertical
+   :spacing 0
+   :padding 0
+   :ui-x 0
+   :ui-y *ui-button-item-height*))      ;position menu below button
+
+(defmethod create-contents ((view ui-choice-menu))
+  (setf (fill-pointer (children view)) 0)
+  (let ((button (choice-button view)))
+    (when button
+      (setf (title view) nil)
+      (when (> (length (choices button)) 0)
+        (loop for text across (choices button)
+              do (let ((tmp text))     ;TODO -- without this all entries get fn of last entry???
+                   (vector-push-extend
+                    (make-instance 'ui-menu-item :ui-w (ui-w button)
+                                                 :ui-h *ui-button-item-height* 
+                                                 :text text
+                                                 :key-text nil
+                                                 :is-active? t
+                                                 :on-click-fn (lambda (modifiers)
+                                                                (declare (ignore modifiers))
+                                                                (setf (text button) tmp)
+                                                                (setf (is-visible? view) nil)
+                                                                (unregister-choice-menu)));unregister menu
+                                                                
+                    (children view)))))))
+  (update-layout view))
+
 ;;;; ui-popup-menu =============================================================
 
 (defclass-kons-9 ui-popup-menu (ui-group)
@@ -583,16 +891,13 @@
   (update-layout view))
 
 ;;;; TODO xxx
-;;++ app table bindings in effect even if menu not visible
-;;++ two-line status bar
-;;  ++ mouse action, key action
 ;;-- context menu
-;;  -- transform
+;;  ++ transform
 ;;  -- register/generate entries
 ;;-- register new command tables from plugins
 ;;  -- procedural-curve
-;;  -- uv-mesh
-;;  -- heightfield
+;;  ++ uv-mesh
+;;  ++ heightfield
 ;;-- auto-generate procedural-curve create and edit dialogs
 ;;-- application class?
 ;;-- multiple visible inspectors? esc closes one under mouse?
@@ -607,6 +912,9 @@
 ;;;; arrow and Enter menu/command-table navigation
 
 #| DONE
+;;++ app table bindings in effect even if menu not visible
+;;++ two-line status bar
+;;  ++ mouse action, key action
 ;;;; store parent for ui-view
 ;;;; ui-message-box -- OK button, text
 ;;;; -- update-layout
@@ -702,8 +1010,12 @@
 (defmethod add-parent-contents ((view ui-outliner-item) &key (recurse? nil))
   (let ((i (position view (children (ui-parent view))))
         (children (children (data view))))
-;    (dotimes (j (min 10 (length children))) ;cap num children entries to 10 to avoid text engine overflow
-    (dotimes (j (length children)) ;cap num children entries to 10 to avoid text engine overflow
+    (dotimes (j (min 10 (length children)))
+      ;; TODO -- cap num children entries to 10 to avoid text engine overflow
+      ;; clipping does not work in all cases -- looks like outliner-view draw gets called without
+      ;; update-layout being called -- maybe due to text render threading?
+      ;; happens when shapes inspector is open and point-instancer-group demo in demo-misc.lisp
+      ;; is run
       (let* ((child (aref children j))
              (text (format nil "~a" (printable-data child)))
              (item (make-instance (outliner-item-class (ui-parent view))
@@ -718,7 +1030,7 @@
                                   :data child
                                   :text text
                                   :is-active? t
-                                  :help-string (format nil "Mouse: select ~a, [ALT] show/hide children"
+                                  :help-string (format nil "Mouse: select ~a" ;, [ALT] show/hide children"
                                                        (name child)))))
         (ui-add-child-at (ui-parent view) item (incf i))
         (add-outliner-child view item))))
@@ -736,7 +1048,6 @@
 ;;;; ui-outliner-viewer ========================================================
 
 (defclass-kons-9 ui-outliner-viewer (ui-sequence-viewer)
-;  ((roots nil))
   ((data-object nil)
    (data-accessor-fn nil)
    (items-show-children '()))
@@ -789,9 +1100,10 @@
                                            :data entry
                                            :text text
                                            :is-active? t
-                                           :help-string (format nil "Mouse: select ~a, [alt] show/hide children"
+                                           :help-string (format nil "Mouse: select ~a" ;, [alt] show/hide children" ; not implemented yet
                                                                 (name entry)))))
-                 (setf (ui-w item) (+ (ui-text-width (outliner-item-text item)) (* 4 *ui-default-spacing*)))
+                 (setf (ui-w item)
+                       (+ (ui-text-width (outliner-item-text item)) (* 4 *ui-default-spacing*)))
                  (ui-add-child view item)
                  ;; show children if any
                  (when (and (has-children-method? (data item)) (show-children? item))
@@ -877,6 +1189,15 @@
 ;;;; drawing ===================================================================
 
 (defun ui-is-clipped? (x-lo y-lo x-hi y-hi)
+
+  ;; (print (list x-lo y-lo x-hi y-hi
+  ;;              *ui-clip-rect*
+  ;;              (and *ui-clip-rect*
+  ;;                   (or (> x-lo (ui-right  *ui-clip-rect*))
+  ;;                       (< x-hi (ui-x      *ui-clip-rect*))
+  ;;                       (> y-lo (ui-bottom *ui-clip-rect*))
+  ;;                       (< y-hi (ui-y      *ui-clip-rect*))))))
+  
   (and *ui-clip-rect*
        (or (> x-lo (ui-right  *ui-clip-rect*))
            (< x-hi (ui-x      *ui-clip-rect*))
@@ -926,12 +1247,21 @@
     (gl:vertex (- (+ x w) inset)    (+ y inset))
     (gl:end)))
 
+(defun draw-text-selection (x0 x1 y)
+  (let ((x-lo (min x0 x1))
+        (x-hi (max x0 x1))
+        (y-lo (+ y 3))
+        (y-hi (- (+ y *ui-button-item-height*) 4)))
+    (gl:color 0.7 0.7 1.0 1.0)
+    (draw-rect-fill x-lo y-lo (- x-hi x-lo) (- y-hi y-lo))))
+
 (defun draw-cursor (x y)
   (let ((x0 (- x 3))
         (x1 (+ x 2))
-        (y0 (+ y 3))
+        (y0 (+ y 5))
         (y1 (- (+ y *ui-button-item-height*) 4)))
     (when (not (ui-is-clipped? x0 y0 x1 y1))
+      (gl:color 0.0 0.0 0.0 1.0)
       (gl:line-width *ui-border-width*)
       (gl:begin :lines)
       (gl:vertex x y0)
@@ -996,17 +1326,26 @@
       (draw-ui-view view x-offset y-offset)
       (with-accessors ((x ui-x) (y ui-y))
           view
-        (render-text (+ 5 x x-offset) (+ 16 y y-offset) (key-text view))
-        (render-text (+ (ui-centered-text-x (text view) (ui-w view)) x x-offset)
-                     (+ 16 y y-offset) (text view)))))
+        (cond ((key-text view)
+               (render-text (+ 5 x x-offset) (+ 16 y y-offset) (key-text view))
+               (render-text (+ (ui-centered-text-x (text view) (ui-w view)) x x-offset)
+                            (+ 16 y y-offset)
+                            (text view)))
+              (t
+               (render-text (+ (ui-centered-text-x (text view) (ui-w view)) x x-offset)
+                            (+ 16 y y-offset)
+                            (text view)))))))
 
   (:method ((view ui-menu-item) x-offset y-offset)
     (when (is-visible? view)
       (draw-ui-view view x-offset y-offset)
       (with-accessors ((x ui-x) (y ui-y))
           view
-        (render-text (+ 5 x x-offset) (+ 16 y y-offset) (key-text view))
-        (render-text (+ 30 x x-offset) (+ 16 y y-offset) (text view)))))
+        (cond ((key-text view)
+               (render-text (+ 5 x x-offset) (+ 16 y y-offset) (key-text view))
+               (render-text (+ 30 x x-offset) (+ 16 y y-offset) (text view)))
+              (t
+               (render-text (+ 5 x x-offset) (+ 16 y y-offset) (text view)))))))
 
   (:method ((view ui-check-box-item) x-offset y-offset)
     (when (is-visible? view)
@@ -1026,6 +1365,15 @@
                             (- *ui-button-item-height* 9) (- *ui-button-item-height* 8)
                             0 (* 2 *ui-border-width*))))))
 
+  (:method ((view ui-choice-button) x-offset y-offset)
+    (when (is-visible? view)
+      (draw-ui-view view x-offset y-offset)
+      (with-accessors ((x ui-x) (y ui-y))
+          view
+        (render-text (+ (text-padding view) x x-offset) (+ 16 y y-offset) (text view))
+        (when (is-visible? (choice-menu view))
+          (draw-view (choice-menu view) (+ x x-offset) (+ y y-offset))))))
+  
   (:method ((view ui-text-box-item) x-offset y-offset)
     (when (is-visible? view)
       (draw-ui-view view x-offset y-offset)
@@ -1035,6 +1383,10 @@
               (local-y (+ y y-offset)))
           (render-text local-x (+ 16 local-y) (text view))
           (when (eq view *ui-keyboard-focus*)
+            (when (not (= (cursor-position view) (mark-position view)))
+              (draw-text-selection (+ local-x (* *ui-font-width* (cursor-position view)))
+                                   (+ local-x (* *ui-font-width* (mark-position view)))
+                                   local-y))
             (draw-cursor (+ local-x (* *ui-font-width* (cursor-position view))) local-y))))))
 
   (:method :after ((view ui-group) x-offset y-offset)
@@ -1044,6 +1396,24 @@
       (loop for child across (children view)
             do (draw-view child (+ (ui-x view) x-offset) (+ (ui-y view) y-offset)))))
   )
+
+(defgeneric draw-view-overlay (view x-offset y-offset)
+
+  (:method ((view ui-view) x-offset y-offset)
+    ;; do nothing
+    )
+
+  (:method ((view ui-choice-button) x-offset y-offset)
+    (when (and (is-visible? view) (is-visible? (choice-menu view)))
+      (draw-view (choice-menu view) (+ (ui-x view) x-offset) (+ (ui-y view) y-offset))
+      ;; we do this here because we need the global x and y of the menu
+      (register-choice-menu (choice-menu view) (+ (ui-x view) x-offset) (+ (ui-y view) y-offset))))
+
+  (:method ((view ui-group) x-offset y-offset)
+    (when (is-visible? view)
+      (loop for child across (children view)
+            do (draw-view-overlay child (+ (ui-x view) x-offset) (+ (ui-y view) y-offset)))))
+)
 
 ;;;; hit testing -------------------------
 
@@ -1072,5 +1442,17 @@
                         (return-from find-ui-at-point found))))
              view)
           (t nil)))
+
+  (:method ((view ui-choice-button) global-x global-y &optional (x-offset 0) (y-offset 0))
+    (if (is-visible? (choice-menu view))
+        (progn
+          (print (list global-x global-y x-offset y-offset (ui-x view) (ui-y view)
+                       (find-ui-at-point (choice-menu view) global-x global-y
+                                         (+ (ui-x view) x-offset) (+ (ui-y view) y-offset))))
+          
+        (find-ui-at-point (choice-menu view) global-x global-y
+                          (+ (ui-x view) x-offset) (+ (ui-y view) y-offset))
+        )
+        (call-next-method)))
   )
 

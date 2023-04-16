@@ -52,23 +52,30 @@
 
 ;;;; particle ============================================================
 
-(defclass particle ()
-  ((pos :accessor pos :initarg :pos :initform (p! 0 0 0))
-   (vel :accessor vel :initarg :vel :initform (p! 0 0 0))
-   (is-alive? :accessor is-alive? :initarg :is-alive? :initform t)
-   (age :accessor age :initarg :age :initform 0)
-   (done-spawn? :accessor done-spawn? :initarg :done-spawn? :initform nil)
-   (mutate-spawns? :accessor mutate-spawns? :initarg :mutate-spawns? :initform nil)
-   (generation :accessor generation :initarg :generation :initform 1)
-   (life-span :accessor life-span :initarg :life-span :initform -1) ; -1 = immortal
-   (update-angle :accessor update-angle :initarg :update-angle :initform (range-float 0.0 0))
-   (spawn-number-children :accessor spawn-number-children :initarg :spawn-number-children :initform (range-float 2 0))
-   (spawn-angle :accessor spawn-angle :initarg :spawn-angle :initform (range-float (/ pi 8) (/ pi 16)))
-   (spawn-life-span-factor :accessor spawn-life-span-factor :initarg :spawn-life-span-factor :initform (range-float 1.0 0))
-   (spawn-velocity-factor :accessor spawn-velocity-factor :initarg :spawn-velocity-factor :initform (range-float 1.0 0))))
+(defclass-kons-9 particle ()
+  ((pos (p! 0 0 0))
+   (vel (p! 0 0 0))
+   (is-alive? t)
+   (generation 1)
+   (life-span -1) ; -1 = immortal
+   (age 0)
+
+   ;; size, color, alpha
+   
+   (points (make-array 0 :adjustable t :fill-pointer t))
+;;   (behaviors (make-array 0 :adjustable t :fill-pointer t))
+   
+   (update-angle (range-float 0.0 0))
+
+   (spawn-done? nil)
+   (spawn-mutate? nil)
+   (spawn-number-children (range-float 2 0))
+   (spawn-angle (range-float 45.0 22.5))
+   (spawn-life-span-factor (range-float 1.0 0))
+   (spawn-velocity-factor (range-float 1.0 0))))
 
 (defmethod copy-particle-data ((dst particle) (src particle))
-  (setf (mutate-spawns? dst) (mutate-spawns? src))
+  (setf (spawn-mutate? dst) (spawn-mutate? src))
   (setf (update-angle dst) (range-duplicate (update-angle src)))
   (setf (spawn-number-children dst) (range-duplicate (spawn-number-children src)))
   (setf (spawn-angle dst) (range-duplicate (spawn-angle src)))
@@ -88,14 +95,15 @@
   (let* ((vel (vel ptcl))
          (rnd (p-rand))
          (axis (p:normalize (p:cross vel rnd)))
-         (mtx (make-axis-rotation-matrix (range-value (update-angle ptcl)) axis))
+         (mtx (make-axis-rotation-matrix (radians (range-value (update-angle ptcl))) axis))
          (new-vel (transform-point vel mtx)))
-    (setf (vel ptcl) new-vel)))
+    (setf (vel ptcl) new-vel)
+    new-vel))
 
 (defmethod update-position ((ptcl particle))
   (setf (pos ptcl)
         (p:+ (pos ptcl)
-            (update-velocity ptcl))))
+             (update-velocity ptcl))))
 
 (defmethod update-particle ((ptcl particle))
   (if (or (= -1 (life-span ptcl))
@@ -109,7 +117,7 @@
   (let* ((vel (vel ptcl))
          (rnd (p-rand))
          (axis (p:normalize (p:cross vel rnd)))
-         (mtx (make-axis-rotation-matrix (range-value (spawn-angle ptcl)) axis))
+         (mtx (make-axis-rotation-matrix (radians (range-value (spawn-angle ptcl))) axis))
          (new-vel (transform-point vel mtx)))
     (p:scale new-vel (range-value (spawn-velocity-factor ptcl)))))
 
@@ -121,16 +129,16 @@
                               :life-span (* (life-span ptcl)
                                             (range-value (spawn-life-span-factor ptcl))))))
     (copy-particle-data child ptcl)   ;transfer data
-    (when (mutate-spawns? ptcl)
+    (when (spawn-mutate? ptcl)
         (mutate-particle child 1.0))
     child))
 
 (defmethod do-spawn ((ptcl particle))
   (if (and (not (= -1 (life-span ptcl)))
            (>= (age ptcl) (life-span ptcl))
-           (not (done-spawn? ptcl)))
+           (not (spawn-done? ptcl)))
       (progn
-        (setf (done-spawn? ptcl) t)
+        (setf (spawn-done? ptcl) t)
         ;; spawn offspring
         (let ((children '()))
           (dotimes (i (round (range-value (spawn-number-children ptcl))))
@@ -140,21 +148,21 @@
 
 ;;;; climbing-particle ===================================================
 
-#| TODO -- comment out until we have POLYH-CLOSEST-POINT
-
 (defclass climbing-particle (particle)
-  ((support-point-cloud :accessor support-point-cloud :initarg :support-point-cloud :initform nil)))
+  ((support-polyh :accessor support-polyh :initarg :support-polyh :initform nil)))
 
 (defmethod copy-particle-data ((dst climbing-particle) (src climbing-particle))
   (call-next-method)
-  (setf (support-point-cloud dst) (support-point-cloud src)))
+  (setf (support-polyh dst) (support-polyh src)))
 
 (defmethod update-position ((ptcl climbing-particle))
-  (call-next-method)
-  (let* ((pos (source-closest-point (support-point-cloud ptcl) (pos ptcl))))
-    (when (not (p:= pos (pos ptcl))) ; avoid duplicate points
-      (setf (pos ptcl) pos))))
-|#
+  (update-velocity ptcl)
+  (let* ((new-pos (p:+ (pos ptcl) (vel ptcl)))
+         (new-pos-on-polyh (polyhedron-closest-point (support-polyh ptcl) new-pos)))
+    (when (not (p:= new-pos-on-polyh (pos ptcl))) ; avoid duplicate points
+      (setf (vel ptcl) (p:scale (p:normalize (p-from-to (pos ptcl) new-pos-on-polyh))
+                                (p:length (vel ptcl)))) ;redirect vel but keep magnitude
+      (setf (pos ptcl) new-pos-on-polyh))))
 
 ;;;; dynamic-particle ====================================================
 
@@ -204,12 +212,10 @@
 
 ;;;; particle-system ====================================================
 
-(defclass particle-system (polyhedron animator)
-  ((particles :accessor particles :initarg :particles :initform (make-array 0 :adjustable t :fill-pointer t))
-   (max-generations :accessor max-generations :initarg :max-generations :initform -1) ; -1 = no maximum
-   (point-source-use-live-positions-only :accessor point-source-use-live-positions-only :initarg :point-source-use-live-positions-only :initform nil)
-   (draw-live-points-only? :accessor draw-live-points-only? :initarg :draw-live-points-only? :initform t)
-   (draw-trails :accessor draw-trails :initarg :draw-trails :initform -1))) ;length, -1 = draw entire trail
+(defclass-kons-9 particle-system (shape animator)
+  ((particles (make-array 0 :adjustable t :fill-pointer t))
+   (max-generations -1) ; -1 = no maximum
+   (draw-live-points-only? :initform t)))
 
 (defmethod print-object ((self particle-system) stream)
   (print-unreadable-object (self stream :type t :identity t)
@@ -232,9 +238,9 @@
   (when *display-points?*
     (draw-points p-sys nil)))
 
-;;; TODO -- trail not implemented
 (defmethod draw-wireframe ((p-sys particle-system))
-  (3d-draw-wireframe-polygons (points p-sys) (faces p-sys) :closed? nil))
+  (do-array (i ptcl (particles p-sys))
+    (3d-draw-curve (points ptcl) nil)))
 
 (defmethod draw-live-points ((p-sys particle-system) use-point-colors?)
   (declare (ignore use-point-colors?))  ;TODO -- maybe implement later
@@ -247,22 +253,17 @@
 (defmethod draw-points ((p-sys particle-system) use-point-colors?)
   (if (draw-live-points-only? p-sys)
       (draw-live-points p-sys use-point-colors?)
-      (call-next-method)))
+      (do-array (i ptcl (particles p-sys))
+        (3d-draw-points (points ptcl) nil))))
 
 (defmethod draw-normals ((p-sys particle-system))
   ;; do nothing
   )
 
-(defmethod add-point ((p-sys particle-system) point)
-  (vector-push-extend point (points p-sys)))
-
-(defmethod add-face ((p-sys particle-system) list)
-  (vector-push-extend list (faces p-sys)))
-
 (defmethod add-particle ((p-sys particle-system) ptcl)
   (vector-push-extend ptcl (particles p-sys))
-  (add-point p-sys (pos ptcl))
-  (add-face p-sys (list (1- (length (points p-sys))))))
+  (vector-push-extend (pos ptcl) (points ptcl))   ;store initial pos in points
+  p-sys)
 
 (defmethod update-motion ((p-sys particle-system) parent-absolute-timing)
   (declare (ignore parent-absolute-timing))
@@ -271,42 +272,46 @@
               (<= (generation ptcl) (max-generations p-sys)))
       (when (is-alive? ptcl)
         (update-particle ptcl)
-        ;; current particle pos is first element of face refs
-        (push (add-point p-sys (pos ptcl)) (aref (faces p-sys) i)))
+        (vector-push-extend (pos ptcl) (points ptcl)))
       (dolist (child (do-spawn ptcl))
         (add-particle p-sys child)))))
 
+(defmethod points ((p-sys particle-system))
+  (apply #'concatenate 'vector (map 'list #'points (particles p-sys))))
+
+(defmethod curves ((p-sys particle-system))
+  (map 'list #'points (particles p-sys)))
+
+(defmethod get-bounds ((p-sys particle-system))
+  (when (= 0 (length (particles p-sys)))
+    (warn "PARTICLE-SYSTEM ~a does not have any points. Using default bounds values." p-sys)
+    (return-from get-bounds (values (p! -1 -1 -1) (p! 1 1 1))))
+  (points-bounds (points p-sys)))
+
 ;;;; point-source-protocol =====================================================
 
+(defmethod provides-point-source-protocol? ((p-sys particle-system))
+  t)
+
 (defmethod source-points ((p-sys particle-system))
-  (let ((points '()))
-    (if (point-source-use-live-positions-only p-sys)
-        (do-array-if (i ptcl #'is-alive? (particles p-sys))
-          (push (pos ptcl) points))
-        (dotimes (i (length (faces p-sys)))
-          (let ((curve (reverse (face-points-list p-sys i))))
-            (setf points (append curve points))))) ;use all points of face
-    (make-array (length points) :initial-contents points)))
+  (points p-sys))
 
 (defmethod source-directions ((p-sys particle-system))
-  (let ((tangents #()))
-    (dotimes (i (length (faces p-sys)))
-      (let* ((fp-reversed (reverse (face-points-list p-sys i)))
-            (curve (make-array (length fp-reversed) :initial-contents fp-reversed)))
-        (setf tangents (concatenate 'vector (curve-tangents-aux curve nil) tangents))))
-        ;; (setf tangents (append (curve-tangents-aux curve nil) tangents))))
-    tangents))
+  (apply #'concatenate 'vector (map
+                                'list
+                                (lambda (ptcl) (curve-tangents-aux (points ptcl) nil))
+                                (particles p-sys))))
 
 ;;;; curve-source-protocol =====================================================
 
+(defmethod provides-curve-source-protocol? ((p-sys particle-system))
+  t)
+
 (defmethod source-curves ((p-sys particle-system))
-  (let ((curves '()))
-    (dotimes (f (length (faces p-sys)))
-      (push (reverse (face-points-array p-sys f)) curves)) ;reverse face points
-    (nreverse curves)))
+  (curves p-sys))
 
 (defmethod source-curves-closed ((p-sys particle-system))
-  (make-list (length (faces p-sys)) :initial-element nil)) ;always open
+  (make-list (length (particles p-sys)) :initial-element nil)) ;always open
 
 ;;;; create particle systems ===================================================
 
@@ -341,26 +346,32 @@
 ;;;; gui =======================================================================
 
 (defun single-point-source-selected? ()
-  (let ((selected-shapes (selected-shapes (scene *default-scene-view*))))
+  (let ((selected-shapes (selected-shapes (scene *scene-view*))))
     (and (= 1 (length selected-shapes))
          (provides-point-source-protocol? (first selected-shapes)))))
 
 (defun make-dynamic-particle-system ()
-  (let* ((scene (scene *default-scene-view*))
+  (let* ((scene (scene *scene-view*))
          (p-source (selected-shape scene))
-         (p-sys (make-particle-system p-source
-                                      (p! .2 .2 .2) 1 -1 'dynamic-particle
-                                      :force-fields (list (make-instance 'constant-force-field
-                                                                         :force-vector (p! 0 -.02 0))))))
+         (p-sys (make-particle-system-from-point-source
+                 p-source
+                 (lambda (v) (p:scale v 0.2))
+                 'dynamic-particle
+                 :life-span -1
+                 :force-fields (list (make-instance 'constant-force-field
+                                                    :force-vector (p! 0 -.02 0))))))
      (add-motion scene p-sys)
     p-sys))
 
 (defun make-wriggly-particle-system ()
-  (let* ((scene (scene *default-scene-view*))
+  (let* ((scene (scene *scene-view*))
          (p-source (selected-shape scene))
-         (p-sys (make-particle-system p-source
-                                      (p! .2 .2 .2) 1 -1 'particle
-                                      :update-angle (range-float (/ pi 8) (/ pi 16)))))
+         (p-sys (make-particle-system-from-point-source
+                 p-source
+                 (lambda (v) (p:scale v 0.2))
+                 'particle
+                 :life-span -1
+                 :update-angle (range-float 20.0 10.0))))
     (add-motion scene p-sys)
     p-sys))
 

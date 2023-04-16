@@ -11,20 +11,14 @@
 
 (defmethod get-bounds ((p-cloud point-cloud))
   (when (= 0 (length (points p-cloud)))
-    (warn "Shape ~a does not have any points. Using default bounds values." p-cloud)
+    (warn "POINT-CLOUD ~a does not have any points. Using default bounds values." p-cloud)
     (return-from get-bounds (values (p! -1 -1 -1) (p! 1 1 1))))
-  (let* ((points (points p-cloud))
-         (bounds-lo (p:copy (aref points 0)))
-         (bounds-hi (p:copy (aref points 0))))
-    (do-array (i p points)
-      (p:min! bounds-lo bounds-lo p)
-      (p:max! bounds-hi bounds-hi p))
-    (values bounds-lo bounds-hi)))
+  (points-bounds (points p-cloud)))
 
 ;;; TODO -- not tested
 (defmethod get-global-bounds ((p-cloud point-cloud))
   (when (= 0 (length (points p-cloud)))
-    (warn "Shape ~a does not have any points. Using default bounds values." p-cloud)
+    (warn "POINT-CLOUD ~a does not have any points. Using default bounds values." p-cloud)
     (return-from get-global-bounds (values (p! -1 -1 -1) (p! 1 1 1))))
   (let* ((points (points p-cloud))
          (bounds-lo (p:copy (aref points 0)))
@@ -111,7 +105,7 @@
          (radius (/ diameter 2.0))
          (angle-delta (/ (- (radians end-angle) (radians start-angle)) num-segments)))
     (dotimes (i (1+ num-segments))
-      (let ((angle (* i angle-delta)))
+      (let ((angle (+ (* i angle-delta) (radians start-angle))))
         (setf (aref points i) (p! (* (sin angle) radius) (* (cos angle) radius) 0))))
     points))
 
@@ -158,12 +152,8 @@
                 (setf (aref points (incf i)) (p! x y z))))))))
     points))
 
-;;; TODO - in-place array modification?
-;;; randomize points
-
 (defmethod randomize-points ((p-cloud point-cloud) delta)
-  (setf (points p-cloud)
-	(map 'vector #'(lambda (p)
-                         (let ((offset (p! (rand1 (p:x delta)) (rand1 (p:y delta)) (rand1 (p:z delta)))))
-                           (p:+ p offset)))
-             (points p-cloud))))
+  (do-array (i p (points p-cloud))
+    (let ((offset (p! (rand1 (p:x delta)) (rand1 (p:y delta)) (rand1 (p:z delta)))))
+      (p:+! p p offset)))
+  p-cloud)

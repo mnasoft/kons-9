@@ -83,7 +83,7 @@ The CURVE class represents open or closed paths in 3D space.
   (add-shape *scene* (translate-to (make-rectangle-curve 2 1 4) (p! 0 0 -4.0)))
   (add-shape *scene* (translate-to (make-square-curve 1.5) (p! 0 0 -2.0)))
   (add-shape *scene* (translate-to (make-circle-curve 2.0 16) (p! 0 0 0.0)))
-  (add-shape *scene* (translate-to (make-arc-curve 2.0 0 90 16) (p! 0 0 2.0)))
+  (add-shape *scene* (translate-to (make-arc-curve 2.0 -30 60 16) (p! 0 0 2.0)))
   (add-shape *scene* (translate-to (make-sine-curve-curve 360 1 2 1 16) (p! 0 0 4.0)))
   (add-shape *scene* (translate-to (make-spiral-curve .2 2.0 -1.0 4 64) (p! 0 0 6.0))))
 
@@ -106,6 +106,15 @@ The POLYHEDRON class is the basic 3D shape representaion.
                        (translate-to (make-octahedron   2.0) (p! 0 0  0))
                        (translate-to (make-dodecahedron 2.0) (p!  2.5 0 0))
                        (translate-to (make-icosahedron  2.0) (p! 5 0 0)))))
+
+#|
+Flat POLYHEDRON shapes. These are one-sided when backface culling is on.
+|#
+(with-clear-scene
+  (add-shapes *scene* (list
+                       (translate-to (make-rectangle-polyhedron 2 1) (p! -2.5 0 0))
+                       (translate-to (make-square-polyhedron 1.5)    (p!  0   0 0))
+                       (translate-to (make-circle-polyhedron 2.0 32) (p!  2.5 0 0)))))
 
 #|
 Refine (subdivide) a polyhedron.
@@ -852,6 +861,18 @@ Hold down space key to play animation. Press '[' key to go back to frame 0.
   (dolist (motion motion-group-instances)
     (print motion)))
 |#
+
+#|
+(Demo 23 kernel) randomize points ==============================================
+
+Randomize points of a shape. Must be a subclass of POINT-CLOUD.
+|#
+(with-clear-scene
+  (add-shape *scene* (randomize-points (make-circle-curve 4.0 32) (p! .1 .1 0))))
+
+(with-clear-scene
+  (add-shape *scene* (randomize-points (make-cube-sphere 4.0 3) (p! .1 .1 0))))
+
 
 #|
 END ============================================================================

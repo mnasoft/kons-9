@@ -47,6 +47,7 @@
    (:file "src/kernel/motion-group")
    (:file "src/kernel/animator")
    (:file "src/kernel/animation")
+   (:file "src/kernel/interactor")
    (:file "src/kernel/scene")
    (:file "src/kernel/scene-draw")
    (:file "src/kernel/scene-hierarchy")
@@ -75,6 +76,7 @@
    #-darwin(:file "src/graphics/opengl/opengl3-text")
    ;; plugins
    (:file "src/plugins/parametric-curve")
+   (:file "src/plugins/outline")
    (:file "src/plugins/uv-mesh")
    (:file "src/plugins/heightfield")
    (:file "src/plugins/superquadric")
@@ -89,6 +91,7 @@
    (:file "src/plugins/procedural-curve")
    (:file "src/plugins/scalar-field")
    (:file "src/plugins/isosurface")
+   (:file "src/plugins/sdf")
    (:file "src/plugins/instancer-shape")
    (:file "src/plugins/manager-group")
    (:file "src/plugins/particle")
@@ -96,6 +99,7 @@
    (:file "src/plugins/poly-mesh")
    (:file "src/plugins/usd")
    (:file "src/plugins/obj")
+   (:file "src/plugins/stl")
    ))
 
 (asdf:defsystem #:kons-9/testsuite

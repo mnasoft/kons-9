@@ -35,7 +35,7 @@ Make sure you have opened the graphics window by doing:
   (select-edge (find-shape-by-name *scene* 'cube) 11)
   (select-edge (find-shape-by-name *scene* 'cube) 10))
 ;;; select faces
-(progn   ;;TODO --  selected faces shouldn't change due to lighting or shading
+(progn
   (select-face (find-shape-by-name *scene* 'cube) 2)
   (select-face (find-shape-by-name *scene* 'cube) 5))
 
@@ -156,7 +156,7 @@ in this and demos below, update the *EXAMPLE-OBJ-FILENAME* for your setup.")
                                       :life-span (rand1 5 10)))
          (shape (make-point-instancer-group p-sys
                                             (make-octahedron .2))))
-    ;;; uncomment to only instance at live position
+    ;;; uncomment to only instance at live position -- SLOT REMOVED FOR NOW
 ;;;    (setf (point-source-use-live-positions-only p-sys) t)
     (add-shape *scene* p-sys)
     (add-motion *scene* p-sys)

@@ -20,17 +20,19 @@
                                      (path-curve-source group)
                                      :twist (twist group)
                                      :taper (taper group)
-                                     :from-end? (from-end? group))))
+                                     :from-end? (from-end? group)))
+  group)
 
 (defun make-sweep-mesh-group (profile-curve-source path-curve-source &rest initargs)
-  (apply #'make-instance 'sweep-mesh-group :profile-curve-source profile-curve-source
-                                           :path-curve-source path-curve-source
-                                           initargs))
+  (compute-procedural-node
+   (apply #'make-instance 'sweep-mesh-group :profile-curve-source profile-curve-source
+                                            :path-curve-source path-curve-source
+                                            initargs)))
 
 ;;;; gui =======================================================================
 
 (defun single-curve-source-selected? ()
-  (let ((shape (selected-shape (scene *default-scene-view*))))
+  (let ((shape (selected-shape (scene *scene-view*))))
     (and shape
          (provides-curve-source-protocol? shape))))
 
@@ -38,7 +40,7 @@
   (let ((table (make-instance `command-table :title "Create Sweep Mesh Group")))
     (ct-make-shape :S "Sweep Mesh Group" (when (single-curve-source-selected?)
                                            (make-sweep-mesh-group (make-circle 0.2 6)
-                                                                  (selected-shape (scene *default-scene-view*))
+                                                                  (selected-shape (scene *scene-view*))
                                                                   :taper 0.0)))
     table))
 

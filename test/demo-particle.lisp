@@ -31,7 +31,7 @@ Create 10 particles from a point. The particles split after their life-span of
 (format t "  particle-system 01...~%") (finish-output)
 
 (with-clear-scene
-  (let ((p-sys (make-particle-system-from-point (p! 0 1 0) 10 (p! -.5 0 -.5) (p! .5 1 .5)
+  (let ((p-sys (make-particle-system-from-point (p! 0 0 0) 10 (p! -.1 0 -.1) (p! .1 .2 .1)
                                                 'particle
                                                 :life-span 5)))
     (add-shape *scene* p-sys)
@@ -95,7 +95,7 @@ Randomized particle velocities' update-angle to give "wriggle" effect.
                                                         (lambda (v) (p:scale v 0.2))
                                                         'particle
                                                         :life-span 10
-                                                        :update-angle (range-float (/ pi 8) (/ pi 16)))))
+                                                        :update-angle (range-float 20.0 10.0))))
     (add-shape *scene* shape)
     (add-shape *scene* p-sys)
     (add-motion *scene* p-sys)))
@@ -138,7 +138,7 @@ Create dynamic particles with wriggle effect.
   (let ((p-sys (make-particle-system-from-point (p! 0 1 0) 10 (p! -.2 0 -.2) (p! .2 .5 .2)
                                                 'dynamic-particle
                                                 :life-span 20
-                                                :update-angle (range-float (/ pi 8) (/ pi 16))
+                                                :update-angle (range-float 20.0 10.0)
                                                 :do-collisions? t
                                                 :elasticity 0.95
                                                 :force-fields (list (make-instance 'constant-force-field
@@ -158,14 +158,15 @@ Simulate particles in orbit.
 (format t "  particle-system 07...~%") (finish-output)
 
 (with-clear-scene
-  (let ((p-sys (make-particle-system-from-point-source (make-circle-curve 4 16)
-                                                       (lambda (v) (p:scale (p:normalize (p+ v (p-rand))) 0.2))
-                                                       'dynamic-particle
-                                                       :life-span -1 ;infinite life-span
-                                                       :do-collisions? nil
-                                                       :force-fields (list (make-instance 'attractor-force-field
-                                                                                          :location (p! 0 0 0)
-                                                                                          :magnitude 0.1)))))
+  (let ((p-sys (make-particle-system-from-point-source
+                (make-circle-curve 4 16)
+                (lambda (v) (p:scale (p:normalize (p+ v (p-rand))) 0.2))
+                'dynamic-particle
+                :life-span -1 ;infinite life-span
+                :do-collisions? nil
+                :force-fields (list (make-instance 'attractor-force-field
+                                                   :location (p! 0 0 0)
+                                                   :magnitude 0.1)))))
     (add-shape *scene* p-sys)
     (add-motion *scene* p-sys)))
 ;;; hold down space key in 3D view to run animation
@@ -182,18 +183,20 @@ force field.
 (format t "  particle-system 08...~%") (finish-output)
 
 (with-clear-scene
-  (let* ((shape (freeze-transform (translate-by (make-heightfield 20 20 (p! -5 0 -5) (p! 5 0 5)
-                                                                  :height-fn (lambda (x z)
-                                                                               (* 4 (turbulence (p! x 0 z) 4))))
-                                                (p! 0 -1 0))))
-         (p-sys (make-particle-system-from-point-source shape
-                                                        (lambda (v) (p:scale v 0.05))
-                                                        'dynamic-particle
-                                                        :life-span -1 ;infinite life-span
-                                                        :do-collisions? nil
-                                                        :force-fields (list (make-instance 'noise-force-field
-                                                                                           :noise-frequency 0.2
-                                                                                           :noise-amplitude 0.2)))))
+  (let* ((shape (freeze-transform
+                 (translate-by (make-heightfield 20 20 (p! -5 0 -5) (p! 5 0 5)
+                                                 :height-fn (lambda (x z)
+                                                              (* 4 (turbulence (p! x 0 z) 4))))
+                               (p! 0 -1 0))))
+         (p-sys (make-particle-system-from-point-source
+                 shape
+                 (lambda (v) (p:scale v 0.05))
+                 'dynamic-particle
+                 :life-span -1 ;infinite life-span
+                 :do-collisions? nil
+                 :force-fields (list (make-instance 'noise-force-field
+                                                    :noise-frequency 0.2
+                                                    :noise-amplitude 0.2)))))
     (add-shape *scene* shape)
     (add-shape *scene* p-sys)
     (add-motion *scene* p-sys)))
@@ -204,105 +207,147 @@ force field.
 #|
 (Demo 09 particle) climbing particle system ====================================
 
-Climbing particles which follow the surface of a shape, via an intermediate
-point-cloud.
+Climbing particles which follow the surface of a shape.
 |#
-
-#| TODO -- comment out until we have POLYH-CLOSEST-POINT
 
 (format t "  particle-system 09...~%") (finish-output)
 
 (with-clear-scene
-  (let* ((shape (make-cube-sphere 6.0 3))
-         (cloud (generate-point-cloud shape 40))
-         (p-sys (make-particle-system-from-point (p! 0 3 0) 10 (p! -.2 0 -.2) (p! .2 0 .2)
+  (let* ((shape (triangulate-polyhedron (make-cube-sphere 6.0 3)))
+         ;(shape (triangulate-polyhedron (make-cube 6)))
+         ;(shape (triangulate-polyhedron (make-grid-uv-mesh 3 3 1 1)))
+         (p-sys (make-particle-system-from-point (p! .5 3.5 0) 10 (p! -.5 0 -.5) (p! .5 0 .5)
                                                  'climbing-particle
-                                                 :support-point-cloud cloud
-                                                 :update-angle (range-float (/ pi 8) (/ pi 16))
+                                                 :support-polyh shape
+                                                 :update-angle (range-float 45.0 22.5)
                                                  :life-span 10)))
     (add-shape *scene* shape)
     (add-shape *scene* p-sys)
     (add-motion *scene* p-sys)))
-;;; hold down space key in 3D view to run animation -- gets slow, need to profile code & optimize
+;;; hold down space key in 3D view to run animation -- gets slow, need to optimize
 ;;; suggestion: turn off filled display for a better view (TAB, D, 1)
 
-(update-scene *scene* 20)               ;do update for batch testing
-|#
+(update-scene *scene* 30)               ;do update for batch testing
 
 #|
-;;; particle-system point-generator-mixin use polyh face centers ---------------
+(Demo 10 particle) particle system from polyhedron faces =======================
 
-(format t "  particle-system 7...~%") (finish-output)
+Generating particles from polyhedron face centroids (as opposed to vertices).
+|#
+
+(format t "  particle-system 10...~%") (finish-output)
 
 (with-clear-scene
-  (let ((p-gen (make-icosahedron 2.0)))
-    (setf (point-source-use-face-centers? p-gen) t)
-    (let* ((p-sys (make-particle-system p-gen (p! .2 .2 .2) 1 4 'particle
+  (let ((p-source (make-icosahedron 2.0)))
+    (setf (point-source-use-face-centers? p-source) t) ;comment out to use poly points
+    (let* ((p-sys (make-particle-system-from-point-source p-source
+                                                          (lambda (v) (p:scale v 0.1))
+                                                          'particle
                                         :life-span 10
-                                        :update-angle (range-float (/ pi 16) (/ pi 32))
-                                        :spawn-angle (range-float (/ pi 8) (/ pi 16))))
+                                        :update-angle (range-float 10.0 5.0)
+                                        :spawn-angle (range-float 45.0 22.5)))
            (sweep-mesh-group (make-sweep-mesh-group (make-circle 0.2 6) p-sys
                                                     :taper 0.0 :twist 0.0)))
-      (add-shape *scene* p-gen)
-      (add-shape *scene* p-sys)
+      (add-shape *scene* p-source)
+      ;; (add-shape *scene* p-sys)         ;no need to add p-sys shape to scene
       (add-shape *scene* sweep-mesh-group)
       (add-motion *scene* p-sys))))
 ;;; hold down space key in 3D view to run animation
 
-;;; particle-system point-generator-mixin polyhedron ---------------------------
+(update-scene *scene* 30)               ;do update for batch testing
 
-(format t "  particle-system 8...~%") (finish-output)
+#|
+(Demo 11 particle) climbing particle system ====================================
 
-(with-clear-scene
-  (let* ((p-gen (import-obj *example-obj-filename*))
-         (p-sys (make-particle-system p-gen (p! .2 .2 .2) 1 4 'dynamic-particle
-                                       :force-fields (list (make-instance 'constant-force-field
-                                                                          :force-vector (p! 0 -.05 0))))))
-    (add-shape *scene* p-gen)
-    (add-shape *scene* p-sys)
-    (add-motion *scene* p-sys)))
-;;; hold down space key in 3D view to run animation -- slow, profile & optimize
-
-;;; particle-system point-generator-mixin particle-system ----------------------
-
-(format t "  particle-system 9...~%") (finish-output)
-
-(with-clear-scene
-  (let* ((p-gen (freeze-transform (translate-by (make-superquadric 8 5 2.0 1.0 1.0)
-                                                (p! 0 2 0))))
-         (p-sys (make-particle-system p-gen (p! .4 .4 .4) 1 1 'particle
-                                      :update-angle (range-float (/ pi 16) (/ pi 32)))))
-    (add-shape *scene* p-gen)
-    (setf (name p-sys) 'p-system-1)
-    (add-shape *sce         ne* p-sys)
-    (add-motion *scene* p-sys)))
-;;; hold down space key in 3D view to run animation
-
-;;; for automated testing
-(update-scene *scene* 10)
-
-;;; make new particle-system generate from paths of existing particle-system
-(progn
-  (clear-motions *scene*)             ;remove exsting particle animator
-  (let* ((p-gen (find-shape-by-name *scene* 'p-system-1))
-         (p-sys (make-particle-system p-gen (p! .4 .4 .4) 1 1 'particle
-                                      :update-angle (range-float (/ pi 16) (/ pi 32)))))
-    (setf (name p-sys) 'p-system-2)
-    (add-shape *scene* p-sys)
-    (add-motion *scene* p-sys)))
-;;; hold down space key in 3D view to run animation
-
-;;; for automated testing
-(update-scene *scene* 5)
-
-;;; do sweep-extrude  
-(let ((group (make-shape-group (sweep-extrude (make-circle 0.25 4)
-                                              (find-shape-by-name *scene* 'p-system-2)
-                                              :taper 0.0))))
-  (set-point-colors-by-uv group (lambda (u v)
-                                  (declare (ignore u))
-                                  (c-rainbow v)))
-    (add-shape *scene* group))
-
+Climbing particles which follow the surface of a shape.
 |#
 
+(format t "  particle-system 11...~%") (finish-output)
+
+(with-clear-scene
+  (let* ((shape (import-obj (asdf:system-relative-pathname "kons-9" "test/data/cow.obj")))
+         (p-sys (make-particle-system-from-point (p! .5 1.8 0) 10 (p! -.5 0 -.5) (p! .5 0 .5)
+                                                 'climbing-particle
+                                                 :support-polyh shape
+                                                 :update-angle (range-float 45.0 22.5)
+                                                 :life-span 10)))
+;    (add-shape *scene* shape)
+    (add-shape *scene* p-sys)
+    (add-motion *scene* p-sys)))
+;;; hold down space key in 3D view to run animation
+
+(update-scene *scene* 30)               ;do update for batch testing
+
+#|
+(Demo 12 particle) dynamic particle system =====================================
+
+Dynamic particles growing from a superquadric with a gravity force field.
+|#
+
+(format t "  particle-system 12...~%") (finish-output)
+
+(with-clear-scene
+  (let ((p-source (freeze-transform (translate-by (make-superquadric 16 8 2.0 1.0 1.0)
+                                                  (p! 0 2 0)))))
+    (setf (point-source-use-face-centers? p-source) t) ;comment out to use poly points
+    (let ((p-sys (make-particle-system-from-point-source
+                  p-source
+                  (lambda (v) (p:scale v 0.2))
+                  'dynamic-particle
+                  :life-span -1 ;infinite life-span
+                  :do-collisions? t
+                  :force-fields (list (make-instance 'constant-force-field
+                                                     :force-vector (p! 0 -0.05 0))))))
+      (add-shape *scene* p-source)
+      (add-shape *scene* p-sys)
+      (add-motion *scene* p-sys))))
+;;; hold down space key in 3D view to run animation
+
+;;; for automated testing
+(update-scene *scene* 30)
+
+#|
+(Demo 13 particle) particle system attributes ==================================
+
+Create a row particle systems with varrying attributes.
+|#
+
+(format t "  particle-system 13...~%") (finish-output)
+
+(with-clear-scene
+  (defparameter *p-sys-1* (make-particle-system-from-point
+                           (p! -8 0 0) 1 (p! 0 .2 0) (p! 0 .2 0)
+                           'particle
+                           :life-span 5))
+  (defparameter *p-sys-2* (make-particle-system-from-point
+                           (p! -4 0 0) 1 (p! 0 .2 0) (p! 0 .2 0)
+                           'particle
+                           :life-span 5
+                           :spawn-angle (range-float 10.0 5.0))) ;narrower branching
+  (defparameter *p-sys-3* (make-particle-system-from-point
+                           (p! 0 0 0) 1 (p! 0 .2 0) (p! 0 .2 0)
+                           'particle
+                           :life-span 5
+                           :spawn-velocity-factor (range-float .5 .2))) ;shorter branching
+  (defparameter *p-sys-4* (make-particle-system-from-point
+                           (p! 4 0 0) 1 (p! 0 .2 0) (p! 0 .2 0)
+                           'particle
+                           :life-span 5
+                           :update-angle (range-float 20.0 10.0))) ;twisty branches
+  (defparameter *p-sys-5* (make-particle-system-from-point
+                           (p! 8 0 0) 1 (p! 0 .2 0) (p! 0 .2 0)
+                           'particle
+                           :life-span 5
+                           :spawn-angle (range-float 5.0 2.5) ;very narrow branching
+                           :update-angle (range-float 10.0 5.0))) ;twisty branches
+  (add-shapes *scene* (list *p-sys-1* *p-sys-2* *p-sys-3* *p-sys-4* *p-sys-5*))
+  (add-motions *scene* (list *p-sys-1* *p-sys-2* *p-sys-3* *p-sys-4* *p-sys-5*)))
+
+;;; hold down space key in 3D view to run animation
+
+(update-scene *scene* 30)               ;do update for batch testing
+
+
+#|
+END ============================================================================
+|#
